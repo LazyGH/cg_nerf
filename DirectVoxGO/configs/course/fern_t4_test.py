@@ -1,6 +1,6 @@
 _base_ = '../llff/fern.py'
 
-expname = 'dvgo_fern_t4_20min'
+expname = 'dvgo_fern_t4_test'
 
 data = dict(
     datadir='./data/nerf_llff_data/fern',

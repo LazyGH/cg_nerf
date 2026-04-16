@@ -9,7 +9,6 @@
 
 name: nerf-tf115
 channels:
-  - pytorch
   - conda-forge
   - defaults
 dependencies:

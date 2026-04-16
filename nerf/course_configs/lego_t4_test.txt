@@ -1,4 +1,4 @@
-expname = lego_t4_20min
+expname = lego_t4_test
 basedir = ./logs
 datadir = ./data/nerf_synthetic/lego
 dataset_type = blender
