@@ -358,6 +358,71 @@ Recommended qualitative figures:
 - For a fair same-time comparison, exclude one-time dependency installation from all timing and preferably exclude the first DVGO CUDA extension compile as well.
 
 
+## Save Craft
+
+```
+from google.colab import drive
+drive.mount('/content/drive/My Drive/Colab Notebooks/CG-pj')
+!cp example.txt /content/drive/My Drive/Colab Notebooks/CG-pj
+```
+
+## Training Time Setting**
+
+Based on the configuration you provided (note: your config specifies the **fern** dataset from LLFF, not the synthetic **lego** dataset), **yes, this setup is borderline suitable for a ~30-minute training time on a Colab T4 GPU, but it will likely spill over slightly to 35–45 minutes.**
+
+Here is a quick breakdown of why:
+* **The Math:** On a T4 GPU, standard TensorFlow NeRF processes a batch (`N_rand = 1024` rays with `64+64` samples) at roughly 6 to 8 iterations per second. 15,000 iterations will take about **30 to 35 minutes of pure training time**.
+* **The Bottleneck:** You have `i_img = 500`. This means NeRF will pause training to render a full test image every 500 steps (30 times total). Rendering a full image is computationally expensive and will easily add 5 to 10 minutes of overhead to your run.
+
+---
+
+### How to modify it to guarantee < 30 minutes
+
+If you strictly need the training to finish under 30 minutes, you should make the following adjustments. I have categorized them from **"No Impact on Quality"** to **"Slight Drop in Quality"**.
+
+#### 1. Reduce Validation Overhead (Highly Recommended - No quality loss)
+The easiest way to save time is to stop the model from rendering so many test images during training.
+* Change `i_img = 5000` (Instead of 500. This alone saves ~5 minutes).
+
+#### 2. Reduce the Number of Iterations (Guaranteed time reduction)
+If 15,000 iterations takes 35 minutes, 10,000 will comfortably finish in ~20-25 minutes. The model will converge slightly less, but the `fern` dataset looks decent even at 10k steps.
+* Change `N_iters = 10000` 
+
+#### 3. Reduce Batch Size or Samples per Ray (If you must keep 15,000 iters)
+If you want to keep `N_iters = 15000` but speed up the individual steps, you can lower the workload per iteration. *Note: This will make the final render slightly noisier/blurrier.*
+* **Option A (Fewer rays):** Change `N_rand = 512` (Down from 1024. Halves the rays processed per step).
+* **Option B (Fewer samples along the ray):** Change `N_samples = 32` and `N_importance = 32` (Down from 64. Halves the number of times the neural network is evaluated per ray).
+
+---
+
+### Suggested Modified Config (Targeting ~20-25 mins)
+
+If you want a safe, optimized config for a Colab T4 that definitely runs in under 30 minutes while preserving as much quality as possible, use this:
+
+```text
+expname = fern_t4_under_30min
+basedir = ./logs
+datadir = ./data/nerf_llff_data/fern
+dataset_type = llff
+
+factor = 8
+llffhold = 8
+use_viewdirs = True
+raw_noise_std = 1e0
+
+# Keeping samples high for quality, but dropping batch size slightly
+N_samples = 64
+N_importance = 64
+N_rand = 512       # Reduced from 1024 to speed up each iteration
+N_iters = 15000    
+random_seed = 0
+
+i_print = 100
+i_img = 5000       # Reduced rendering frequency to save overhead time!
+i_weights = 5000
+i_testset = 15000
+i_video = 15000
+```
 
 
 
