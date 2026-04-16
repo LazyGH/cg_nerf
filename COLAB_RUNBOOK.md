@@ -370,6 +370,44 @@ Recommended qualitative figures:
 - If you have extra time, compare them against `nerf/paper_configs/blender_config.txt` and `nerf/paper_configs/llff_config.txt` as a higher-quality reference.
 - For a fair same-time comparison, exclude one-time dependency installation from all timing and preferably exclude the first DVGO CUDA extension compile as well.
 
+## Separate Runtime Update
+
+This appendix supersedes the earlier combined environment setup for actual course runs.
+
+Use separate runtimes:
+
+1. NeRF runtime: TensorFlow 1.15 + Python 3.7
+2. DVGO runtime: clean PyTorch runtime
+
+The full updated guide is in [SEPARATE_RUNTIME_GUIDE.md](C:/Users/Jerry/Documents/Code/CityU/CS6493_CG/pj/SEPARATE_RUNTIME_GUIDE.md).
+
+New environment file for NeRF:
+
+- [environment_colab_tf115.yml](C:/Users/Jerry/Documents/Code/CityU/CS6493_CG/pj/nerf/environment_colab_tf115.yml)
+
+Key changes from the previous guide:
+
+- NeRF training is now explicitly routed back to the original TF1.15-style stack instead of the newer TF2-first setup.
+- `project_tools/render_eval_nerf.py` is supported in that NeRF env by adding CPU PyTorch and `lpips`.
+- DVGO remains in its own clean runtime and now writes TensorBoard logs.
+
+Minimal start points:
+
+NeRF:
+
+```bash
+cd /content/cg_nerf
+conda env create -f nerf/environment_colab_tf115.yml
+conda run -n nerf-tf115 python nerf/run_nerf.py --config nerf/course_configs/lego_t4_20min.txt
+```
+
+DVGO:
+
+```bash
+cd /content/cg_nerf/DirectVoxGO
+python run.py --config configs/course/lego_t4_20min.py --i_tb 100
+```
+
 
 ## run tensorboard on colab
 

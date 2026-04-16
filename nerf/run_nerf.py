@@ -18,6 +18,61 @@ if not tf.executing_eagerly():
     tf.compat.v1.enable_eager_execution()
 
 
+def create_summary_writer(logdir):
+    if hasattr(tf.summary, 'create_file_writer'):
+        return {
+            'kind': 'tf2',
+            'writer': tf.summary.create_file_writer(logdir),
+        }
+    if hasattr(tf, 'contrib') and hasattr(tf.contrib, 'summary'):
+        writer = tf.contrib.summary.create_file_writer(logdir)
+        writer.set_as_default()
+        return {
+            'kind': 'tf1_contrib',
+            'writer': writer,
+        }
+    return None
+
+
+def summary_scalar(writer_info, name, value, step):
+    if writer_info is None:
+        return
+    if writer_info['kind'] == 'tf2':
+        with writer_info['writer'].as_default():
+            tf.summary.scalar(name, value, step=step)
+    else:
+        with tf.contrib.summary.always_record_summaries():
+            tf.contrib.summary.scalar(name, value, step=step)
+
+
+def summary_histogram(writer_info, name, value, step):
+    if writer_info is None:
+        return
+    if writer_info['kind'] == 'tf2':
+        with writer_info['writer'].as_default():
+            tf.summary.histogram(name, value, step=step)
+    else:
+        with tf.contrib.summary.always_record_summaries():
+            tf.contrib.summary.histogram(name, value, step=step)
+
+
+def summary_image(writer_info, name, value, step):
+    if writer_info is None:
+        return
+    if writer_info['kind'] == 'tf2':
+        with writer_info['writer'].as_default():
+            tf.summary.image(name, tf.convert_to_tensor(value), step=step)
+    else:
+        with tf.contrib.summary.always_record_summaries():
+            tf.contrib.summary.image(name, value, step=step)
+
+
+def flush_summary_writer(writer_info):
+    if writer_info is None:
+        return
+    writer_info['writer'].flush()
+
+
 def batchify(fn, chunk):
     """Constructs a version of 'fn' that applies to smaller batches."""
     if chunk is None:
@@ -753,7 +808,7 @@ def train():
     print('VAL views are', i_val)
 
     # Summary writers
-    writer = tf.summary.create_file_writer(
+    writer = create_summary_writer(
         os.path.join(basedir, 'summaries', expname))
 
     for i in range(start, N_iters):
@@ -877,13 +932,12 @@ def train():
 
             print(expname, i, psnr.numpy(), loss.numpy(), global_step.numpy())
             print('iter time {:.05f}'.format(dt))
-            with writer.as_default():
-                step = int(global_step.numpy())
-                tf.summary.scalar('loss', loss, step=step)
-                tf.summary.scalar('psnr', psnr, step=step)
-                tf.summary.histogram('tran', trans, step=step)
-                if args.N_importance > 0:
-                    tf.summary.scalar('psnr0', psnr0, step=step)
+            step = int(global_step.numpy())
+            summary_scalar(writer, 'loss', loss, step)
+            summary_scalar(writer, 'psnr', psnr, step)
+            summary_histogram(writer, 'tran', trans, step)
+            if args.N_importance > 0:
+                summary_scalar(writer, 'psnr0', psnr0, step)
 
             if i % args.i_img == 0:
 
@@ -903,28 +957,25 @@ def train():
                     os.makedirs(testimgdir, exist_ok=True)
                 imageio.imwrite(os.path.join(testimgdir, '{:06d}.png'.format(i)), to8b(rgb))
 
-                with writer.as_default():
-                    step = int(global_step.numpy())
-                    tf.summary.image('rgb', tf.convert_to_tensor(to8b(rgb)[tf.newaxis]), step=step)
-                    tf.summary.image(
-                        'disp', tf.convert_to_tensor(disp[tf.newaxis, ..., tf.newaxis]), step=step)
-                    tf.summary.image(
-                        'acc', tf.convert_to_tensor(acc[tf.newaxis, ..., tf.newaxis]), step=step)
+                step = int(global_step.numpy())
+                summary_image(writer, 'rgb', to8b(rgb)[tf.newaxis], step)
+                summary_image(
+                    writer, 'disp', disp[tf.newaxis, ..., tf.newaxis], step)
+                summary_image(
+                    writer, 'acc', acc[tf.newaxis, ..., tf.newaxis], step)
 
-                    tf.summary.scalar('psnr_holdout', psnr, step=step)
-                    tf.summary.image('rgb_holdout', tf.convert_to_tensor(target[tf.newaxis]), step=step)
+                summary_scalar(writer, 'psnr_holdout', psnr, step)
+                summary_image(writer, 'rgb_holdout', target[tf.newaxis], step)
 
                 if args.N_importance > 0:
 
-                    with writer.as_default():
-                        step = int(global_step.numpy())
-                        tf.summary.image(
-                            'rgb0', tf.convert_to_tensor(to8b(extras['rgb0'])[tf.newaxis]), step=step)
-                        tf.summary.image(
-                            'disp0', tf.convert_to_tensor(extras['disp0'][tf.newaxis, ..., tf.newaxis]), step=step)
-                        tf.summary.image(
-                            'z_std', tf.convert_to_tensor(extras['z_std'][tf.newaxis, ..., tf.newaxis]), step=step)
-                writer.flush()
+                    summary_image(
+                        writer, 'rgb0', to8b(extras['rgb0'])[tf.newaxis], step)
+                    summary_image(
+                        writer, 'disp0', extras['disp0'][tf.newaxis, ..., tf.newaxis], step)
+                    summary_image(
+                        writer, 'z_std', extras['z_std'][tf.newaxis, ..., tf.newaxis], step)
+                flush_summary_writer(writer)
 
         global_step.assign_add(1)
 

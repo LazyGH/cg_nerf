@@ -1,0 +1,31 @@
+# Colab-focused NeRF environment.
+# Purpose:
+# - keep the original NeRF training stack close to the official repo
+# - add just enough packages for tensorboard and the unified evaluation script
+#
+# Notes:
+# - TensorFlow 1.15 is the training target here.
+# - PyTorch is included in CPU mode only for LPIPS evaluation in project_tools/render_eval_nerf.py.
+
+name: nerf-tf115
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.7
+  - pip
+  - cudatoolkit=10.0
+  - tensorflow-gpu=1.15
+  - numpy
+  - scipy
+  - matplotlib
+  - imageio
+  - imageio-ffmpeg
+  - configargparse
+  - imagemagick
+  - tensorboard
+  - pytorch=1.13
+  - torchvision=0.14
+  - cpuonly
+  - pip:
+      - lpips
