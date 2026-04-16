@@ -33,6 +33,15 @@ from load_llff import load_llff_data  # noqa: E402
 import run_nerf as nerf_run  # noqa: E402
 
 
+def set_tf_seed(seed):
+    if seed is None:
+        return
+    if hasattr(tf.random, "set_seed"):
+        tf.random.set_seed(seed)
+    else:
+        tf.compat.v1.set_random_seed(seed)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", required=True, help="NeRF config txt file")
@@ -131,7 +140,7 @@ def main():
 
     if args.random_seed is not None:
         np.random.seed(args.random_seed)
-        tf.random.set_seed(args.random_seed)
+        set_tf_seed(args.random_seed)
 
     if not args.ft_path:
         args.ft_path = resolve_latest_ckpt(args.basedir, args.expname)

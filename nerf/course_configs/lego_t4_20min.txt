@@ -11,14 +11,14 @@ use_viewdirs = True
 N_samples = 32
 N_importance = 32
 N_rand = 1024
-N_iters = 5000
+N_iters = 5002
 
 precrop_iters = 500
 precrop_frac = 0.5
 random_seed = 0
 
 i_print = 100
-i_img = 5000
-i_weights = 5000
+i_img = 2500
+i_weights = 1000
 i_testset = 10000
 i_video = 10000
