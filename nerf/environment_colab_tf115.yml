@@ -11,11 +11,12 @@ name: nerf-tf115
 channels:
   - pytorch
   - conda-forge
+  - defaults
 dependencies:
   - python=3.7
   - pip
   - cudatoolkit=10.0
-  - tensorflow-gpu=1.15
+  - cudnn=7.6.5
   - numpy
   - scipy
   - matplotlib
@@ -29,3 +30,4 @@ dependencies:
   - cpuonly
   - pip:
       - lpips
+      - tensorflow-gpu==1.15.5
