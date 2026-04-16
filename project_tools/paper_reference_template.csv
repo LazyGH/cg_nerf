@@ -1,5 +1,5 @@
 method,scene,source,psnr,ssim,lpips,train_time_minutes,citation,notes
-NeRF,lego,paper,,,,,Mildenhall et al. ECCV 2020,
-NeRF,fern,paper,,,,,Mildenhall et al. ECCV 2020,
-DVGO,lego,paper,,,,,Sun et al. CVPR 2022,
+NeRF,lego,paper,32.54,0.961,0.050,720,Mildenhall et al. ECCV 2020,
+NeRF,fern,paper,25.17,0.792,0.247,720,Mildenhall et al. ECCV 2020,
+DVGO,lego,paper,34.64,0.976,0.028,13.2,Sun et al. CVPR 2022,
 DVGO,fern,paper,,,,,Sun et al. CVPR 2022,
