@@ -107,7 +107,10 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
     
     def imread(f):
         if f.endswith('png'):
-            return imageio.imread(f, ignoregamma=True)
+            try:
+                return imageio.imread(f, ignoregamma=True)
+            except TypeError:
+                return imageio.imread(f)
         else:
             return imageio.imread(f)
         
@@ -314,6 +317,5 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
     poses = poses.astype(np.float32)
 
     return images, poses, bds, render_poses, i_test
-
 
 

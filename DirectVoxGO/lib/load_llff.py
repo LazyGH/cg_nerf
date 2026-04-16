@@ -7,7 +7,10 @@ import scipy
 ##########  see https://github.com/Fyusion/LLFF for original
 def imread(f):
     if f.endswith('png'):
-        return imageio.imread(f, ignoregamma=True)
+        try:
+            return imageio.imread(f, ignoregamma=True)
+        except TypeError:
+            return imageio.imread(f)
     else:
         return imageio.imread(f)
 
