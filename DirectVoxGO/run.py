@@ -9,6 +9,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
 
 from lib import utils, dvgo, dcvgo, dmpigo
 from lib.load_data import load_data
@@ -53,6 +57,8 @@ def config_parser():
     # logging/saving options
     parser.add_argument("--i_print",   type=int, default=500,
                         help='frequency of console printout and metric loggin')
+    parser.add_argument("--i_tb",      type=int, default=100,
+                        help='frequency of tensorboard scalar logging')
     parser.add_argument("--i_weights", type=int, default=100000,
                         help='frequency of weight ckpt saving')
     return parser
@@ -298,7 +304,8 @@ def load_existed_model(args, cfg, cfg_train, reload_ckpt_path):
     return model, optimizer, start
 
 
-def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, data_dict, stage, coarse_ckpt_path=None):
+def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, data_dict, stage,
+                             coarse_ckpt_path=None, tb_writer=None):
     # init
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if abs(cfg_model.world_bound_scale - 1) > 1e-9:
@@ -399,6 +406,7 @@ def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, 
     time0 = time.time()
     global_step = -1
     for global_step in trange(1+start, 1+cfg_train.N_iters):
+        iter_start = time.time()
 
         # renew occupancy grid
         if model.mask_cache is not None and (global_step + 500) % 1000 == 0:
@@ -452,6 +460,10 @@ def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, 
         optimizer.zero_grad(set_to_none=True)
         loss = cfg_train.weight_main * F.mse_loss(render_result['rgb_marched'], target)
         psnr = utils.mse2psnr(loss.detach())
+        entropy_last_loss = None
+        nearclip_loss = None
+        loss_distortion = None
+        rgbper_loss = None
         if cfg_train.weight_entropy_last > 0:
             pout = render_result['alphainv_last'].clamp(1e-6, 1-1e-6)
             entropy_last_loss = -(pout*torch.log(pout) + (1-pout)*torch.log(1-pout)).mean()
@@ -492,6 +504,22 @@ def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, 
         decay_factor = 0.1 ** (1/decay_steps)
         for i_opt_g, param_group in enumerate(optimizer.param_groups):
             param_group['lr'] = param_group['lr'] * decay_factor
+        iter_time = time.time() - iter_start
+
+        if tb_writer is not None and (global_step % args.i_tb == 0 or global_step == 1):
+            tb_writer.add_scalar(f'{stage}/loss', loss.item(), global_step)
+            tb_writer.add_scalar(f'{stage}/psnr', psnr.item(), global_step)
+            tb_writer.add_scalar(f'{stage}/iter_time_sec', iter_time, global_step)
+            if optimizer.param_groups:
+                tb_writer.add_scalar(f'{stage}/lr', optimizer.param_groups[0]['lr'], global_step)
+            if entropy_last_loss is not None:
+                tb_writer.add_scalar(f'{stage}/entropy_last_loss', entropy_last_loss.item(), global_step)
+            if loss_distortion is not None:
+                tb_writer.add_scalar(f'{stage}/distortion_loss', loss_distortion.item(), global_step)
+            if rgbper_loss is not None:
+                tb_writer.add_scalar(f'{stage}/rgbper_loss', rgbper_loss.item(), global_step)
+            if nearclip_loss is not None:
+                tb_writer.add_scalar(f'{stage}/nearclip_loss', nearclip_loss.item(), global_step)
 
         # check log & save
         if global_step%args.i_print==0:
@@ -520,6 +548,9 @@ def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, 
             'optimizer_state_dict': optimizer.state_dict(),
         }, last_ckpt_path)
         print(f'scene_rep_reconstruction ({stage}): saved checkpoints at', last_ckpt_path)
+        if tb_writer is not None:
+            tb_writer.add_scalar(f'{stage}/completed_step', global_step, global_step)
+            tb_writer.flush()
 
 
 def train(args, cfg, data_dict):
@@ -533,20 +564,39 @@ def train(args, cfg, data_dict):
             attr = getattr(args, arg)
             file.write('{} = {}\n'.format(arg, attr))
     cfg.dump(os.path.join(cfg.basedir, cfg.expname, 'config.py'))
+    tb_writer = None
+    if SummaryWriter is None:
+        print('train: tensorboard is unavailable (install tensorboard to enable logging)')
+    else:
+        tb_dir = os.path.join(cfg.basedir, 'summaries', cfg.expname)
+        tb_writer = SummaryWriter(tb_dir)
+        tb_writer.add_text('config', cfg.pretty_text, 0)
+        args_text = '\n'.join([f'{arg} = {getattr(args, arg)}' for arg in sorted(vars(args))])
+        tb_writer.add_text('args', args_text, 0)
+        tb_writer.add_text('status', 'training_started', 0)
 
     # coarse geometry searching (only works for inward bounded scenes)
     eps_coarse = time.time()
     xyz_min_coarse, xyz_max_coarse = compute_bbox_by_cam_frustrm(args=args, cfg=cfg, **data_dict)
+    if tb_writer is not None:
+        tb_writer.add_scalar('bbox/coarse_xyz_min_x', xyz_min_coarse[0].item(), 0)
+        tb_writer.add_scalar('bbox/coarse_xyz_min_y', xyz_min_coarse[1].item(), 0)
+        tb_writer.add_scalar('bbox/coarse_xyz_min_z', xyz_min_coarse[2].item(), 0)
+        tb_writer.add_scalar('bbox/coarse_xyz_max_x', xyz_max_coarse[0].item(), 0)
+        tb_writer.add_scalar('bbox/coarse_xyz_max_y', xyz_max_coarse[1].item(), 0)
+        tb_writer.add_scalar('bbox/coarse_xyz_max_z', xyz_max_coarse[2].item(), 0)
     if cfg.coarse_train.N_iters > 0:
         scene_rep_reconstruction(
                 args=args, cfg=cfg,
                 cfg_model=cfg.coarse_model_and_render, cfg_train=cfg.coarse_train,
                 xyz_min=xyz_min_coarse, xyz_max=xyz_max_coarse,
-                data_dict=data_dict, stage='coarse')
+                data_dict=data_dict, stage='coarse', tb_writer=tb_writer)
         eps_coarse = time.time() - eps_coarse
         eps_time_str = f'{eps_coarse//3600:02.0f}:{eps_coarse//60%60:02.0f}:{eps_coarse%60:02.0f}'
         print('train: coarse geometry searching in', eps_time_str)
         coarse_ckpt_path = os.path.join(cfg.basedir, cfg.expname, f'coarse_last.tar')
+        if tb_writer is not None:
+            tb_writer.add_scalar('timing/coarse_secs', eps_coarse, 0)
     else:
         print('train: skip coarse geometry searching')
         coarse_ckpt_path = None
@@ -559,19 +609,33 @@ def train(args, cfg, data_dict):
         xyz_min_fine, xyz_max_fine = compute_bbox_by_coarse_geo(
                 model_class=dvgo.DirectVoxGO, model_path=coarse_ckpt_path,
                 thres=cfg.fine_model_and_render.bbox_thres)
+    if tb_writer is not None:
+        tb_writer.add_scalar('bbox/fine_xyz_min_x', xyz_min_fine[0].item(), 0)
+        tb_writer.add_scalar('bbox/fine_xyz_min_y', xyz_min_fine[1].item(), 0)
+        tb_writer.add_scalar('bbox/fine_xyz_min_z', xyz_min_fine[2].item(), 0)
+        tb_writer.add_scalar('bbox/fine_xyz_max_x', xyz_max_fine[0].item(), 0)
+        tb_writer.add_scalar('bbox/fine_xyz_max_y', xyz_max_fine[1].item(), 0)
+        tb_writer.add_scalar('bbox/fine_xyz_max_z', xyz_max_fine[2].item(), 0)
     scene_rep_reconstruction(
             args=args, cfg=cfg,
             cfg_model=cfg.fine_model_and_render, cfg_train=cfg.fine_train,
             xyz_min=xyz_min_fine, xyz_max=xyz_max_fine,
             data_dict=data_dict, stage='fine',
-            coarse_ckpt_path=coarse_ckpt_path)
+            coarse_ckpt_path=coarse_ckpt_path, tb_writer=tb_writer)
     eps_fine = time.time() - eps_fine
     eps_time_str = f'{eps_fine//3600:02.0f}:{eps_fine//60%60:02.0f}:{eps_fine%60:02.0f}'
     print('train: fine detail reconstruction in', eps_time_str)
+    if tb_writer is not None:
+        tb_writer.add_scalar('timing/fine_secs', eps_fine, 0)
 
     eps_time = time.time() - eps_time
     eps_time_str = f'{eps_time//3600:02.0f}:{eps_time//60%60:02.0f}:{eps_time%60:02.0f}'
     print('train: finish (eps time', eps_time_str, ')')
+    if tb_writer is not None:
+        tb_writer.add_scalar('timing/total_secs', eps_time, 0)
+        tb_writer.add_text('status', 'training_finished', 1)
+        tb_writer.flush()
+        tb_writer.close()
 
 
 if __name__=='__main__':
