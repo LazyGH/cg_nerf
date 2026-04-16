@@ -265,6 +265,19 @@ python project_tools/render_eval_dvgo.py \
   --source trained \
   --train_time_minutes 30
 ```
+## for 20 min train time:
+
+```
+python nerf/run_nerf.py --config nerf/course_configs/lego_t4_20min.txt
+python nerf/run_nerf.py --config nerf/course_configs/fern_t4_20min.txt
+
+python DirectVoxGO/run.py --config DirectVoxGO/configs/course/
+lego_t4_20min.py --render_test --dump_images --eval_ssim
+--eval_lpips_alex
+python DirectVoxGO/run.py --config DirectVoxGO/configs/course/
+fern_t4_20min.py --render_test --dump_images --eval_ssim
+--eval_lpips_ale
+```
 
 ## Aggregate the quantitative results
 
@@ -358,6 +371,13 @@ Recommended qualitative figures:
 - For a fair same-time comparison, exclude one-time dependency installation from all timing and preferably exclude the first DVGO CUDA extension compile as well.
 
 
+## run tensorboard on colab
+
+```
+%load_ext tensorboard
+%tensorboard --logdir /content/pj/nerf/logs/summaries
+```
+
 ## Save Craft
 
 ```
@@ -426,7 +446,7 @@ i_video = 15000
 
 
 
-**Final response**:
+**Response**:
 
 • Implemented a Colab-oriented reproduction/evaluation workflow with
   minimal source changes. The main entry point is COLAB_RUNBOOK.md, which
@@ -455,3 +475,130 @@ i_video = 15000
   https://www.tensorflow.org/install/pip,
   https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html,
   https://mmcv.readthedocs.io/en/latest/get_started/installation.html.
+
+
+• 1. The evaluation scripts do not train again.
+
+  project_tools/render_eval_nerf.py only does this:
+
+  - parses the NeRF config
+  - finds a checkpoint you already trained, or uses the checkpoint path you
+    pass with --ckpt
+  - rebuilds the NeRF network and loads weights via ft_path
+  - renders the test images
+  - computes PSNR, SSIM, LPIPS
+  - saves RGB predictions, GT, disparity, opacity, error maps, and
+    metrics.json / metrics.csv
+
+  You can see that flow in project_tools/render_eval_nerf.py:53,
+  project_tools/render_eval_nerf.py:137, project_tools/
+  render_eval_nerf.py:140, project_tools/render_eval_nerf.py:166,
+  project_tools/render_eval_nerf.py:233.
+
+  project_tools/render_eval_dvgo.py is the same idea for DVGO:
+
+  - loads fine_last.tar or coarse_last.tar, or your explicit --ckpt
+  - loads the trained model with utils.load_model(...)
+  - renders the test images
+  - computes metrics and saves artifacts
+
+  See project_tools/render_eval_dvgo.py:51, project_tools/
+  render_eval_dvgo.py:105, project_tools/render_eval_dvgo.py:109,
+  project_tools/render_eval_dvgo.py:147, project_tools/
+  render_eval_dvgo.py:219.
+
+  So:
+
+  - if checkpoints already exist, they use them
+  - if checkpoints do not exist, they fail
+  - they do not continue training
+
+  2. TensorBoard on Colab
+
+  For NeRF, TensorBoard logs are written to nerf/run_nerf.py:756 under:
+
+  - nerf/logs/summaries/<expname>
+
+  Use this in Colab:
+
+  %load_ext tensorboard
+  %tensorboard --logdir /content/pj/nerf/logs/summaries
+
+  If you want one run only:
+
+  %tensorboard --logdir /content/pj/nerf/logs/summaries/lego_t4_30min
+
+  Also useful:
+
+  - validation images are saved in nerf/logs/<expname>/tboard_val_imgs
+  - checkpoints are in nerf/logs/<expname>/
+
+  If you want to view locally later, download:
+
+  - nerf/logs/summaries/<expname>/ for TensorBoard event files
+  - optionally nerf/logs/<expname>/tboard_val_imgs/
+
+  Then locally run:
+
+  tensorboard --logdir /path/to/summaries
+
+  For DVGO, the official code does not write TensorBoard logs. It prints
+  progress to console and saves checkpoints; see DirectVoxGO/run.py:399 and
+  DirectVoxGO/run.py:508. So for DVGO, unless we patch it, there is no
+  TensorBoard. You mainly keep:
+
+  - console cell output
+  - DirectVoxGO/logs/.../<expname>/fine_last.tar
+  - rendered evaluation outputs in result/...
+
+  3. To limit training to about 20 minutes each
+
+  You usually do not need to modify source code further. Just change config
+  values.
+
+  For NeRF, the main controls are:
+
+  - N_iters
+  - i_img
+  - N_rand
+  - N_samples
+  - N_importance
+
+  The most important hidden overhead is i_img, because every time it
+  triggers, NeRF renders a full validation image during training; see nerf/
+  run_nerf.py:887. For a 20 minute target, raise i_img a lot.
+
+  Recommended 20-minute NeRF settings:
+
+
+  If it is still too slow, reduce one more level:
+
+  - N_rand = 512 for lego too
+  - or N_samples = 32, N_importance = 32
+
+  For DVGO, the main controls are:
+
+  - coarse_train.N_iters
+  - fine_train.N_iters
+  - N_rand
+  - num_voxels
+  - pg_scale
+
+  Recommended 20-minute DVGO settings:
+
+  lego
+
+
+  fern
+
+  So the answer to “what other code needs to modify?” is:
+
+  - none, if you are fine with iteration-based control
+  - just create new config files and run with them
+
+  Only if you want a strict wall-clock stop at exactly 20 minutes, then you
+  would need extra control code outside the official loop, because both
+  NeRF and DVGO are iteration-driven, not time-driven.
+
+  If you want, I can add four ready-to-use *_t4_20min config files into the
+  repo now.
