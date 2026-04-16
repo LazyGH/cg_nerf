@@ -16,7 +16,6 @@ dependencies:
   - python=3.7
   - pip
   - cudatoolkit=10.0
-  - cudnn=7.6.5
   - numpy
   - scipy
   - matplotlib
@@ -24,10 +23,6 @@ dependencies:
   - imageio-ffmpeg
   - configargparse
   - imagemagick
-  - tensorboard
-  - pytorch=1.13
-  - torchvision=0.14
-  - cpuonly
+  - tensorflow-gpu==1.15
   - pip:
       - lpips
-      - tensorflow-gpu==1.15.5

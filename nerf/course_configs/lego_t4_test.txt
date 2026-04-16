@@ -11,7 +11,7 @@ use_viewdirs = True
 N_samples = 32
 N_importance = 32
 N_rand = 1024
-N_iters = 5000
+N_iters = 5
 
 precrop_iters = 500
 precrop_frac = 0.5

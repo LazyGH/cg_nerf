@@ -10,7 +10,7 @@ data = dict(
 )
 
 coarse_train = dict(
-    N_iters=500,
+    N_iters=200,
     N_rand=4096,
     pg_scale=[],
 )
