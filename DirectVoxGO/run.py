@@ -2,7 +2,14 @@ import os, sys, copy, glob, json, time, random, argparse
 from shutil import copyfile
 from tqdm import tqdm, trange
 
-import mmcv
+try:
+    from mmcv import Config as MMCVConfig
+except (ImportError, AttributeError):
+    MMCVConfig = None
+try:
+    from mmengine.config import Config as MMEngineConfig
+except ImportError:
+    MMEngineConfig = None
 import imageio
 import numpy as np
 
@@ -14,10 +21,31 @@ try:
 except ImportError:
     SummaryWriter = None
 
-from lib import utils, dvgo, dcvgo, dmpigo
+from lib import utils, dvgo
 from lib.load_data import load_data
 
 from torch_efficient_distloss import flatten_eff_distloss
+
+
+def load_config(config_path):
+    if MMCVConfig is not None:
+        return MMCVConfig.fromfile(config_path)
+    if MMEngineConfig is not None:
+        return MMEngineConfig.fromfile(config_path)
+    raise ImportError(
+        'No compatible Config implementation found. '
+        'Install mmcv with Config support or install mmengine.'
+    )
+
+
+def get_model_class(cfg):
+    if cfg.data.ndc:
+        from lib import dmpigo
+        return dmpigo.DirectMPIGO
+    if cfg.data.unbounded_inward:
+        from lib import dcvgo
+        return dcvgo.DirectContractedVoxGO
+    return dvgo.DirectVoxGO
 
 
 def config_parser():
@@ -267,21 +295,22 @@ def create_new_model(cfg, cfg_model, cfg_train, xyz_min, xyz_max, stage, coarse_
     if len(cfg_train.pg_scale):
         num_voxels = int(num_voxels / (2**len(cfg_train.pg_scale)))
 
+    model_class = get_model_class(cfg)
     if cfg.data.ndc:
         print(f'scene_rep_reconstruction ({stage}): \033[96muse multiplane images\033[0m')
-        model = dmpigo.DirectMPIGO(
+        model = model_class(
             xyz_min=xyz_min, xyz_max=xyz_max,
             num_voxels=num_voxels,
             **model_kwargs)
     elif cfg.data.unbounded_inward:
         print(f'scene_rep_reconstruction ({stage}): \033[96muse contraced voxel grid (covering unbounded)\033[0m')
-        model = dcvgo.DirectContractedVoxGO(
+        model = model_class(
             xyz_min=xyz_min, xyz_max=xyz_max,
             num_voxels=num_voxels,
             **model_kwargs)
     else:
         print(f'scene_rep_reconstruction ({stage}): \033[96muse dense voxel grid\033[0m')
-        model = dvgo.DirectVoxGO(
+        model = model_class(
             xyz_min=xyz_min, xyz_max=xyz_max,
             num_voxels=num_voxels,
             mask_cache_path=coarse_ckpt_path,
@@ -291,12 +320,7 @@ def create_new_model(cfg, cfg_model, cfg_train, xyz_min, xyz_max, stage, coarse_
     return model, optimizer
 
 def load_existed_model(args, cfg, cfg_train, reload_ckpt_path):
-    if cfg.data.ndc:
-        model_class = dmpigo.DirectMPIGO
-    elif cfg.data.unbounded_inward:
-        model_class = dcvgo.DirectContractedVoxGO
-    else:
-        model_class = dvgo.DirectVoxGO
+    model_class = get_model_class(cfg)
     model = utils.load_model(model_class, reload_ckpt_path).to(device)
     optimizer = utils.create_optimizer_or_freeze_model(model, cfg_train, global_step=0)
     model, optimizer, start = utils.load_checkpoint(
@@ -416,9 +440,9 @@ def scene_rep_reconstruction(args, cfg, cfg_model, cfg_train, xyz_min, xyz_max, 
         if global_step in cfg_train.pg_scale:
             n_rest_scales = len(cfg_train.pg_scale)-cfg_train.pg_scale.index(global_step)-1
             cur_voxels = int(cfg_model.num_voxels / (2**n_rest_scales))
-            if isinstance(model, (dvgo.DirectVoxGO, dcvgo.DirectContractedVoxGO)):
+            if hasattr(model, 'scale_volume_grid') and not hasattr(model, 'mpi_depth'):
                 model.scale_volume_grid(cur_voxels)
-            elif isinstance(model, dmpigo.DirectMPIGO):
+            elif hasattr(model, 'mpi_depth'):
                 model.scale_volume_grid(cur_voxels, model.mpi_depth)
             else:
                 raise NotImplementedError
@@ -643,7 +667,7 @@ if __name__=='__main__':
     # load setup
     parser = config_parser()
     args = parser.parse_args()
-    cfg = mmcv.Config.fromfile(args.config)
+    cfg = load_config(args.config)
 
     # init enviroment
     if torch.cuda.is_available():
@@ -700,12 +724,7 @@ if __name__=='__main__':
         else:
             ckpt_path = os.path.join(cfg.basedir, cfg.expname, 'fine_last.tar')
         ckpt_name = ckpt_path.split('/')[-1][:-4]
-        if cfg.data.ndc:
-            model_class = dmpigo.DirectMPIGO
-        elif cfg.data.unbounded_inward:
-            model_class = dcvgo.DirectContractedVoxGO
-        else:
-            model_class = dvgo.DirectVoxGO
+        model_class = get_model_class(cfg)
         model = utils.load_model(model_class, ckpt_path).to(device)
         stepsize = cfg.fine_model_and_render.stepsize
         render_viewpoints_kwargs = {

@@ -2,7 +2,14 @@ import argparse
 import os
 import sys
 
-import mmcv
+try:
+    from mmcv import Config as MMCVConfig
+except (ImportError, AttributeError):
+    MMCVConfig = None
+try:
+    from mmengine.config import Config as MMEngineConfig
+except ImportError:
+    MMEngineConfig = None
 import numpy as np
 import torch
 
@@ -46,6 +53,17 @@ def resolve_repo_path(path):
     if not path:
         return path
     return path if os.path.isabs(path) else os.path.normpath(os.path.join(DVGO_ROOT, path))
+
+
+def load_config(config_path):
+    if MMCVConfig is not None:
+        return MMCVConfig.fromfile(config_path)
+    if MMEngineConfig is not None:
+        return MMEngineConfig.fromfile(config_path)
+    raise ImportError(
+        'No compatible Config implementation found. '
+        'Install mmcv with Config support or install mmengine.'
+    )
 
 
 def resolve_latest_ckpt(cfg):
@@ -99,7 +117,7 @@ def main():
     args = parse_args()
 
     config_path = os.path.abspath(args.config)
-    cfg = mmcv.Config.fromfile(config_path)
+    cfg = load_config(config_path)
     cfg.basedir = resolve_repo_path(cfg.basedir)
     cfg.data.datadir = resolve_repo_path(cfg.data.datadir)
     ckpt_path = resolve_repo_path(args.ckpt) if args.ckpt else resolve_latest_ckpt(cfg)

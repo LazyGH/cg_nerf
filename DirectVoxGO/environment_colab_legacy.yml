@@ -18,4 +18,5 @@ dependencies:
   - pip:
       - lpips
       - mmcv-lite
+      - mmengine
       - torch_efficient_distloss

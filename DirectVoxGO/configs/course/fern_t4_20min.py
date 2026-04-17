@@ -17,10 +17,10 @@ coarse_train = dict(
 )
 
 fine_train = dict(
-    N_iters=5000,
+    N_iters=5001,
     N_rand=4096,
     pg_scale=[1500, 3000, 5000],
-    tv_dense_before=4000,
+    tv_dense_before=3000,
 )
 
 fine_model_and_render = dict(
