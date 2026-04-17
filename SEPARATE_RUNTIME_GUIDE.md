@@ -168,25 +168,34 @@ After the runtime restarts:
 
 ```bash
 cd /content/cg_nerf
+conda env remove -n dvgo-legacy -y || true
 conda env create -f DirectVoxGO/environment_colab_legacy.yml
 conda run -n dvgo-legacy python -V
-conda run -n dvgo-legacy python - <<'PY'
-import torch
-print("torch:", torch.__version__)
-print("cuda:", torch.version.cuda)
-PY
 ```
 
-Expected target:
+Install the official PyTorch CUDA wheel from the PyTorch previous-versions page:
+
+```bash
+conda run --no-capture-output -n dvgo-legacy pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
+conda run --no-capture-output -n dvgo-legacy python -c "import torch; print('torch:', torch.__version__); print('cuda:', torch.version.cuda)"
+```
+
+Expected:
 
 - Python 3.8
-- PyTorch 1.12.1
+- PyTorch 1.12.1+cu113
 - CUDA 11.3
 
 Then install `torch_scatter` using the matching PyG wheel:
 
 ```bash
-conda run -n dvgo-legacy pip install torch_scatter -f https://data.pyg.org/whl/torch-1.12.0+cu113.html
+conda run --no-capture-output -n dvgo-legacy pip install --no-index torch_scatter -f https://data.pyg.org/whl/torch-1.12.0+cu113.html
+```
+
+If that still fails in your runtime, use the conda package instead:
+
+```bash
+conda run --no-capture-output -n dvgo-legacy conda install -y pyg::pytorch-scatter
 ```
 
 ### Prepare DVGO data
@@ -206,23 +215,23 @@ First verify the CUDA extension import:
 
 ```bash
 cd /content/cg_nerf/DirectVoxGO
-conda run -n dvgo-legacy python -c "from lib import dvgo; print('DVGO CUDA extension loaded successfully.')"
+conda run --no-capture-output -n dvgo-legacy python -c "from lib import dvgo; print('DVGO CUDA extension loaded successfully.')"
 ```
 
 20 minute configs:
 
 ```bash
 cd /content/cg_nerf/DirectVoxGO
-time conda run -n dvgo-legacy python run.py --config configs/course/lego_t4_20min.py --i_tb 100
-time conda run -n dvgo-legacy python run.py --config configs/course/fern_t4_20min.py --i_tb 100
+time conda run --no-capture-output -n dvgo-legacy python run.py --config configs/course/lego_t4_20min.py --i_tb 100
+time conda run --no-capture-output -n dvgo-legacy python run.py --config configs/course/fern_t4_20min.py --i_tb 100
 ```
 
 30 minute configs:
 
 ```bash
 cd /content/cg_nerf/DirectVoxGO
-time conda run -n dvgo-legacy python run.py --config configs/course/lego_t4_30min.py --i_tb 100
-time conda run -n dvgo-legacy python run.py --config configs/course/fern_t4_30min.py --i_tb 100
+time conda run --no-capture-output -n dvgo-legacy python run.py --config configs/course/lego_t4_30min.py --i_tb 100
+time conda run --no-capture-output -n dvgo-legacy python run.py --config configs/course/fern_t4_30min.py --i_tb 100
 ```
 
 ### TensorBoard for DVGO
@@ -242,7 +251,7 @@ In Colab:
 
 ```bash
 cd /content/cg_nerf
-conda run -n dvgo-legacy python project_tools/render_eval_dvgo.py \
+conda run --no-capture-output -n dvgo-legacy python project_tools/render_eval_dvgo.py \
   --config DirectVoxGO/configs/course/lego_t4_20min.py \
   --output_dir result/dvgo/lego_trained_20min \
   --source trained \
@@ -282,3 +291,8 @@ Specific compatibility fixes:
 - [load_blender.py](C:/Users/Jerry/Documents/Code/CityU/CS6493_CG/pj/nerf/load_blender.py) now falls back from `tf.image.resize_area` to `tf.image.resize(..., method='area')` when needed.
 - [run_nerf.py](C:/Users/Jerry/Documents/Code/CityU/CS6493_CG/pj/nerf/run_nerf.py) now supports both TF1.15 `tf.contrib.summary` style logging and TF2 `tf.summary` style logging.
 - DVGO CUDA JIT loading is now centralized in [cuda_utils.py](C:/Users/Jerry/Documents/Code/CityU/CS6493_CG/pj/DirectVoxGO/lib/cuda_utils.py), and the C++ wrappers were updated from `tensor.type().is_cuda()` to `tensor.is_cuda()` for better compatibility with newer PyTorch APIs.
+
+Sources:
+
+- PyTorch previous versions: https://docs.pytorch.org/get-started/previous-versions/
+- PyG installation guide: https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html

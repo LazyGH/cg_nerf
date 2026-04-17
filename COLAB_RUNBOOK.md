@@ -405,10 +405,13 @@ DVGO:
 
 ```bash
 cd /content/cg_nerf
+conda env remove -n dvgo-legacy -y || true
 conda env create -f DirectVoxGO/environment_colab_legacy.yml
+conda run --no-capture-output -n dvgo-legacy pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
+conda run --no-capture-output -n dvgo-legacy pip install --no-index torch_scatter -f https://data.pyg.org/whl/torch-1.12.0+cu113.html
 cd /content/cg_nerf/DirectVoxGO
-conda run -n dvgo-legacy python -c "from lib import dvgo; print('DVGO CUDA extension loaded successfully.')"
-conda run -n dvgo-legacy python run.py --config configs/course/lego_t4_20min.py --i_tb 100
+conda run --no-capture-output -n dvgo-legacy python -c "from lib import dvgo; print('DVGO CUDA extension loaded successfully.')"
+conda run --no-capture-output -n dvgo-legacy python run.py --config configs/course/lego_t4_20min.py --i_tb 100
 ```
 
 
