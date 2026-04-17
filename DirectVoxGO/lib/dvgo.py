@@ -364,7 +364,7 @@ class DirectVoxGO(torch.nn.Module):
         rgb_marched = segment_coo(
                 src=(weights.unsqueeze(-1) * rgb),
                 index=ray_id,
-                out=torch.zeros([N, 3]),
+                out=torch.zeros([N, 3], device=weights.device),
                 reduce='sum')
         rgb_marched += (alphainv_last.unsqueeze(-1) * render_kwargs['bg'])
         ret_dict.update({
@@ -381,7 +381,7 @@ class DirectVoxGO(torch.nn.Module):
                 depth = segment_coo(
                         src=(weights * step_id),
                         index=ray_id,
-                        out=torch.zeros([N]),
+                        out=torch.zeros([N], device=weights.device),
                         reduce='sum')
             ret_dict.update({'depth': depth})
 

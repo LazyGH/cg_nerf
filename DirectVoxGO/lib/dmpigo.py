@@ -242,10 +242,10 @@ class DirectMPIGO(torch.nn.Module):
         mask_inbbox = ~mask_outbbox
         ray_pts = ray_pts[mask_inbbox]
         if mask_inbbox.all():
-            ray_id, step_id = create_full_step_id(mask_inbbox.shape)
+            ray_id, step_id = create_full_step_id(mask_inbbox.shape, device=rays_o.device)
         else:
-            ray_id = torch.arange(mask_inbbox.shape[0]).view(-1,1).expand_as(mask_inbbox)[mask_inbbox]
-            step_id = torch.arange(mask_inbbox.shape[1]).view(1,-1).expand_as(mask_inbbox)[mask_inbbox]
+            ray_id = torch.arange(mask_inbbox.shape[0], device=rays_o.device).view(-1,1).expand_as(mask_inbbox)[mask_inbbox]
+            step_id = torch.arange(mask_inbbox.shape[1], device=rays_o.device).view(1,-1).expand_as(mask_inbbox)[mask_inbbox]
         return ray_pts, ray_id, step_id, N_samples
 
     def forward(self, rays_o, rays_d, viewdirs, global_step=None, **render_kwargs):
@@ -310,7 +310,7 @@ class DirectMPIGO(torch.nn.Module):
         rgb_marched = segment_coo(
                 src=(weights.unsqueeze(-1) * rgb),
                 index=ray_id,
-                out=torch.zeros([N, 3]),
+                out=torch.zeros([N, 3], device=weights.device),
                 reduce='sum')
         if render_kwargs.get('rand_bkgd', False) and global_step is not None:
             rgb_marched += (alphainv_last.unsqueeze(-1) * torch.rand_like(rgb_marched))
@@ -333,7 +333,7 @@ class DirectMPIGO(torch.nn.Module):
                 depth = segment_coo(
                         src=(weights * s),
                         index=ray_id,
-                        out=torch.zeros([N]),
+                        out=torch.zeros([N], device=weights.device),
                         reduce='sum')
             ret_dict.update({'depth': depth})
 
@@ -341,8 +341,8 @@ class DirectMPIGO(torch.nn.Module):
 
 
 @functools.lru_cache(maxsize=128)
-def create_full_step_id(shape):
-    ray_id = torch.arange(shape[0]).view(-1,1).expand(shape).flatten()
-    step_id = torch.arange(shape[1]).view(1,-1).expand(shape).flatten()
+def create_full_step_id(shape, device=None):
+    ray_id = torch.arange(shape[0], device=device).view(-1,1).expand(shape).flatten()
+    step_id = torch.arange(shape[1], device=device).view(1,-1).expand(shape).flatten()
     return ray_id, step_id
 

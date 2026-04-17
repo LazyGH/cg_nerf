@@ -347,12 +347,12 @@ class DirectBiVoxGO(nn.Module):
         rgb_marched_fg = segment_coo(
                 src=(fg['weights'].unsqueeze(-1) * fg['rgb']),
                 index=fg['ray_id'],
-                out=torch.zeros([N, 3]),
+                out=torch.zeros([N, 3], device=fg['weights'].device),
                 reduce='sum')
         rgb_marched_bg = segment_coo(
                 src=(bg['weights'].unsqueeze(-1) * bg['rgb']),
                 index=bg['ray_id'],
-                out=torch.zeros([N, 3]),
+                out=torch.zeros([N, 3], device=bg['weights'].device),
                 reduce='sum')
         rgb_marched = rgb_marched_fg + \
                       fg['alphainv_last'].unsqueeze(-1) * rgb_marched_bg + \
@@ -372,17 +372,17 @@ class DirectBiVoxGO(nn.Module):
                 depth_fg = segment_coo(
                         src=(fg['weights'] * fg['step_id']),
                         index=fg['ray_id'],
-                        out=torch.zeros([N]),
+                        out=torch.zeros([N], device=fg['weights'].device),
                         reduce='sum')
                 depth_bg = segment_coo(
                         src=(bg['weights'] * bg['step_id']),
                         index=bg['ray_id'],
-                        out=torch.zeros([N]),
+                        out=torch.zeros([N], device=bg['weights'].device),
                         reduce='sum')
                 depth_fg_last = segment_coo(
                         src=fg['step_id'].float(),
                         index=fg['ray_id'],
-                        out=torch.zeros([N]),
+                        out=torch.zeros([N], device=fg['weights'].device),
                         reduce='max')
                 depth_bg_last = segment_coo(
                         src=bg['step_id'].float(),

@@ -341,7 +341,7 @@ class DirectContractedVoxGO(nn.Module):
         rgb_marched = segment_coo(
                 src=(weights.unsqueeze(-1) * rgb),
                 index=ray_id,
-                out=torch.zeros([N, 3]),
+                out=torch.zeros([N, 3], device=weights.device),
                 reduce='sum')
         if render_kwargs.get('rand_bkgd', False) and is_train:
             rgb_marched += (alphainv_last.unsqueeze(-1) * torch.rand_like(rgb_marched))
@@ -350,7 +350,7 @@ class DirectContractedVoxGO(nn.Module):
         wsum_mid = segment_coo(
                 src=weights[inner_mask],
                 index=ray_id[inner_mask],
-                out=torch.zeros([N]),
+                out=torch.zeros([N], device=weights.device),
                 reduce='sum')
         s = 1 - 1/(1+t)  # [0, inf] => [0, 1]
         ret_dict.update({
@@ -373,7 +373,7 @@ class DirectContractedVoxGO(nn.Module):
                 depth = segment_coo(
                         src=(weights * s),
                         index=ray_id,
-                        out=torch.zeros([N]),
+                        out=torch.zeros([N], device=weights.device),
                         reduce='sum')
             ret_dict.update({'depth': depth})
 

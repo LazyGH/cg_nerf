@@ -86,20 +86,21 @@ def select_model_class(cfg):
 
 @torch.no_grad()
 def render_single_view(model, cfg, render_kwargs, H, W, K, c2w):
+    device = next(model.parameters()).device
     rays_o, rays_d, viewdirs = dvgo.get_rays_of_a_view(
         H,
         W,
         K,
-        torch.as_tensor(c2w, device=next(model.parameters()).device),
+        torch.as_tensor(c2w, device=device),
         cfg.data.ndc,
         inverse_y=cfg.data.inverse_y,
         flip_x=cfg.data.flip_x,
         flip_y=cfg.data.flip_y,
     )
     keys = ["rgb_marched", "depth", "alphainv_last"]
-    rays_o = rays_o.flatten(0, -2)
-    rays_d = rays_d.flatten(0, -2)
-    viewdirs = viewdirs.flatten(0, -2)
+    rays_o = rays_o.flatten(0, -2).to(device)
+    rays_d = rays_d.flatten(0, -2).to(device)
+    viewdirs = viewdirs.flatten(0, -2).to(device)
     chunks = []
     for ro, rd, vd in zip(rays_o.split(8192, 0), rays_d.split(8192, 0), viewdirs.split(8192, 0)):
         chunks.append({k: v for k, v in model(ro, rd, vd, **render_kwargs).items() if k in keys})
