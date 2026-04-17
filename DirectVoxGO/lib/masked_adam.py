@@ -1,13 +1,13 @@
 import os
 import torch
-from torch.utils.cpp_extension import load
+from .cuda_utils import load_cuda_extension
 
 parent_dir = os.path.dirname(os.path.abspath(__file__))
 sources=['cuda/adam_upd.cpp', 'cuda/adam_upd_kernel.cu']
-adam_upd_cuda = load(
+adam_upd_cuda = load_cuda_extension(
         name='adam_upd_cuda',
-        sources=[os.path.join(parent_dir, path) for path in sources],
-        verbose=True)
+        parent_dir=parent_dir,
+        sources=sources)
 
 
 ''' Extend Adam optimizer

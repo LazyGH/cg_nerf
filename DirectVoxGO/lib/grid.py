@@ -7,21 +7,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.utils.cpp_extension import load
+from .cuda_utils import load_cuda_extension
 parent_dir = os.path.dirname(os.path.abspath(__file__))
-render_utils_cuda = load(
+render_utils_cuda = load_cuda_extension(
         name='render_utils_cuda',
-        sources=[
-            os.path.join(parent_dir, path)
-            for path in ['cuda/render_utils.cpp', 'cuda/render_utils_kernel.cu']],
-        verbose=True)
+        parent_dir=parent_dir,
+        sources=['cuda/render_utils.cpp', 'cuda/render_utils_kernel.cu'])
 
-total_variation_cuda = load(
+total_variation_cuda = load_cuda_extension(
         name='total_variation_cuda',
-        sources=[
-            os.path.join(parent_dir, path)
-            for path in ['cuda/total_variation.cpp', 'cuda/total_variation_kernel.cu']],
-        verbose=True)
+        parent_dir=parent_dir,
+        sources=['cuda/total_variation.cpp', 'cuda/total_variation_kernel.cu'])
 
 
 def create_grid(type, **kwargs):

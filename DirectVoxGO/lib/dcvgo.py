@@ -13,14 +13,12 @@ from . import grid
 from .dvgo import Raw2Alpha, Alphas2Weights
 from .dmpigo import create_full_step_id
 
-from torch.utils.cpp_extension import load
+from .cuda_utils import load_cuda_extension
 parent_dir = os.path.dirname(os.path.abspath(__file__))
-ub360_utils_cuda = load(
+ub360_utils_cuda = load_cuda_extension(
         name='ub360_utils_cuda',
-        sources=[
-            os.path.join(parent_dir, path)
-            for path in ['cuda/ub360_utils.cpp', 'cuda/ub360_utils_kernel.cu']],
-        verbose=True)
+        parent_dir=parent_dir,
+        sources=['cuda/ub360_utils.cpp', 'cuda/ub360_utils_kernel.cu'])
 
 
 '''Model'''

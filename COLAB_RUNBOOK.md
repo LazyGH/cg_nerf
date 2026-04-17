@@ -404,8 +404,11 @@ conda run -n nerf-tf115 python nerf/run_nerf.py --config nerf/course_configs/leg
 DVGO:
 
 ```bash
+cd /content/cg_nerf
+conda env create -f DirectVoxGO/environment_colab_legacy.yml
 cd /content/cg_nerf/DirectVoxGO
-python run.py --config configs/course/lego_t4_20min.py --i_tb 100
+conda run -n dvgo-legacy python -c "from lib import dvgo; print('DVGO CUDA extension loaded successfully.')"
+conda run -n dvgo-legacy python run.py --config configs/course/lego_t4_20min.py --i_tb 100
 ```
 
 
