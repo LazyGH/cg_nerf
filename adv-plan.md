@@ -21,7 +21,7 @@ This is a course-project improvement over original random ray sampling. Keep the
 5. Do not run alpha ablations.
 6. Do not retrain original NeRF baselines. The user already has original trained checkpoints and specific baseline config files.
 7. New edge-aware configs must reference/copy the user's existing scene configs and change only the experiment name plus edge-sampling flags.
-8. The final run will be done manually on Colab with the existing conda environment. Local `uv`/Python 3.8 is only for lightweight syntax and logic checks.
+8. The final run will be done manually on Colab with clone remote github repo and  setting up conda environment. Local `uv`/Python 3.8 is only for lightweight syntax and logic checks.
 
 ## Current codebase
 

@@ -8,6 +8,7 @@ import imageio
 import json
 import random
 import time
+from edge_ray_sampler import build_edge_cdfs, sample_from_cdf
 from run_nerf_helpers import *
 from load_llff import load_llff_data
 from load_deepvoxels import load_dv_data
@@ -549,6 +550,14 @@ def config_parser():
                         help='number of pts sent through network in parallel, decrease if running out of memory')
     parser.add_argument("--no_batching", action='store_true',
                         help='only take random rays from 1 image at a time')
+    parser.add_argument("--edge_ray_sampling", action='store_true',
+                        help='Enable edge-aware image-space ray sampling.')
+    parser.add_argument("--edge_sampling_alpha", type=float, default=0.0,
+                        help='Mixture weight for edge probability map. 0.0 means uniform; 1.0 means edge-only.')
+    parser.add_argument("--edge_sampling_eps", type=float, default=1e-6,
+                        help='Small positive constant added before edge-probability normalization.')
+    parser.add_argument("--edge_sampling_smooth", action='store_true',
+                        help='Apply a lightweight 3x3 smoothing filter to gradient magnitude before normalization.')
     parser.add_argument("--no_reload", action='store_true',
                         help='do not reload weights from saved ckpt')
     parser.add_argument("--ft_path", type=str, default=None,
@@ -634,6 +643,15 @@ def train():
 
     parser = config_parser()
     args = parser.parse_args()
+
+    if args.edge_ray_sampling and not 0.0 <= args.edge_sampling_alpha <= 1.0:
+        raise ValueError('edge_sampling_alpha must be in [0, 1].')
+    if args.edge_ray_sampling:
+        print('EDGE RAY SAMPLING enabled: alpha={}, eps={}, smooth={}'.format(
+            args.edge_sampling_alpha,
+            args.edge_sampling_eps,
+            args.edge_sampling_smooth,
+        ))
     
     if args.random_seed is not None:
         print('Fixing random seed', args.random_seed)
@@ -707,6 +725,19 @@ def train():
     H, W, focal = hwf
     H, W = int(H), int(W)
     hwf = [H, W, focal]
+
+    edge_samplers = None
+    edge_global_cdf = None
+    if args.edge_ray_sampling:
+        edge_samplers, edge_global_cdf = build_edge_cdfs(
+            images=images,
+            i_train=i_train,
+            alpha=args.edge_sampling_alpha,
+            eps=args.edge_sampling_eps,
+            smooth=args.edge_sampling_smooth,
+        )
+        print('Built edge-aware CDFs for {} train images.'.format(len(i_train)))
+        print('Global CDF length = {}.'.format(edge_global_cdf.shape[0]))
 
     if args.render_test:
         render_poses = np.array(poses[i_test])
@@ -796,8 +827,11 @@ def train():
         # [(N-1)*H*W, ro+rd+rgb, 3]
         rays_rgb = np.reshape(rays_rgb, [-1, 3, 3])
         rays_rgb = rays_rgb.astype(np.float32)
-        print('shuffle rays')
-        np.random.shuffle(rays_rgb)
+        if args.edge_ray_sampling:
+            print('edge-aware batching keeps rays_rgb in deterministic flatten order')
+        else:
+            print('shuffle rays')
+            np.random.shuffle(rays_rgb)
         print('done')
         i_batch = 0
 
@@ -818,17 +852,22 @@ def train():
 
         if use_batching:
             # Random over all images
-            batch = rays_rgb[i_batch:i_batch+N_rand]  # [B, 2+1, 3*?]
+            if args.edge_ray_sampling:
+                select_inds = sample_from_cdf(edge_global_cdf, N_rand)
+                batch = rays_rgb[select_inds]
+            else:
+                batch = rays_rgb[i_batch:i_batch+N_rand]  # [B, 2+1, 3*?]
             batch = tf.transpose(batch, [1, 0, 2])
 
             # batch_rays[i, n, xyz] = ray origin or direction, example_id, 3D position
             # target_s[n, rgb] = example_id, observed color.
             batch_rays, target_s = batch[:2], batch[2]
 
-            i_batch += N_rand
-            if i_batch >= rays_rgb.shape[0]:
-                np.random.shuffle(rays_rgb)
-                i_batch = 0
+            if not args.edge_ray_sampling:
+                i_batch += N_rand
+                if i_batch >= rays_rgb.shape[0]:
+                    np.random.shuffle(rays_rgb)
+                    i_batch = 0
 
         else:
             # Random from one image
@@ -851,9 +890,31 @@ def train():
                     coords = tf.stack(tf.meshgrid(
                         tf.range(H), tf.range(W), indexing='ij'), -1)
                 coords = tf.reshape(coords, [-1, 2])
-                select_inds = np.random.choice(
-                    coords.shape[0], size=[N_rand], replace=False)
-                select_inds = tf.gather_nd(coords, select_inds[:, tf.newaxis])
+                coords_np = coords.numpy()
+                if args.edge_ray_sampling:
+                    sampler = edge_samplers[int(img_i)]
+                    if i < args.precrop_iters:
+                        flat_coords = coords_np[:, 0] * W + coords_np[:, 1]
+                        crop_probs = sampler['prob'][flat_coords]
+                        crop_probs_sum = crop_probs.sum()
+                        if np.isfinite(crop_probs_sum) and crop_probs_sum > 0.0:
+                            crop_cdf = np.cumsum(crop_probs / crop_probs_sum)
+                            crop_cdf[-1] = 1.0
+                            local_ids = sample_from_cdf(crop_cdf, N_rand)
+                        else:
+                            local_ids = np.random.choice(
+                                coords_np.shape[0], size=[N_rand], replace=False)
+                        select_inds_np = coords_np[local_ids]
+                    else:
+                        flat_ids = sample_from_cdf(sampler['cdf'], N_rand)
+                        ys = flat_ids // W
+                        xs = flat_ids % W
+                        select_inds_np = np.stack([ys, xs], axis=-1).astype(np.int32)
+                    select_inds = tf.convert_to_tensor(select_inds_np, dtype=tf.int32)
+                else:
+                    select_inds = np.random.choice(
+                        coords.shape[0], size=[N_rand], replace=False)
+                    select_inds = tf.gather_nd(coords, select_inds[:, tf.newaxis])
                 rays_o = tf.gather_nd(rays_o, select_inds)
                 rays_d = tf.gather_nd(rays_d, select_inds)
                 batch_rays = tf.stack([rays_o, rays_d], 0)
@@ -868,6 +929,8 @@ def train():
                 H, W, focal, chunk=args.chunk, rays=batch_rays,
                 verbose=i < 10, retraw=True, **render_kwargs_train)
 
+            # Edge-aware sampling intentionally uses biased ray selection.
+            # Keep the original unweighted RGB MSE objective.
             # Compute MSE loss between predicted and true RGB.
             img_loss = img2mse(rgb, target_s)
             trans = extras['raw'][..., -1]

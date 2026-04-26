@@ -1,0 +1,29 @@
+expname = lego_edge_alpha06
+basedir = ./logs
+datadir = ./data/nerf_synthetic/lego
+dataset_type = blender
+
+half_res = True
+no_batching = True
+white_bkgd = True
+use_viewdirs = True
+
+N_samples = 32
+N_importance = 32
+N_rand = 1024
+N_iters = 5002
+
+precrop_iters = 500
+precrop_frac = 0.5
+random_seed = 0
+
+edge_ray_sampling = True
+edge_sampling_alpha = 0.6
+edge_sampling_eps = 1e-6
+edge_sampling_smooth = True
+
+i_print = 100
+i_img = 2500
+i_weights = 1000
+i_testset = 10000
+i_video = 10000
