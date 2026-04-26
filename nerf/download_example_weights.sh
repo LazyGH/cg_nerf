@@ -1,6 +1,6 @@
 mkdir -p logs
 cd logs
-wget -q http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/fern_example_weights.zip
+wget -nv http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/fern_example_weights.zip
 unzip -q fern_example_weights.zip
-wget -q http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/lego_example_weights.zip
+wget -nv http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/lego_example_weights.zip
 unzip -q lego_example_weights.zip
